@@ -123,6 +123,14 @@ h1{font-size:30px}
 #full #lyr{grid-area:2/2/9/3;align-self:stretch;min-width:0;transform:translateX(80px);padding:22vh 0;transition:opacity .5s .2s,transform .7s cubic-bezier(.3,.7,.2,1),padding .45s}
 #full.ly #lyr{transform:none;padding:22vh 0}
 }
+.tabs{display:flex;gap:6px;margin-top:10px;padding:4px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid var(--ln)}
+.tab{flex:1;padding:8px;border-radius:10px;font-weight:700;color:var(--mu);transition:background .2s,color .2s}
+.tab.on{background:linear-gradient(135deg,#ffb36b,#ff7a45);color:var(--ac2);box-shadow:0 4px 16px rgba(255,130,60,.35)}
+#chips{display:flex;gap:8px;overflow-x:auto;margin-top:10px;scrollbar-width:none}
+#chips[hidden]{display:none}
+.chip{flex:none;padding:6px 14px;border-radius:999px;border:1px solid var(--ln);background:rgba(255,255,255,.06);color:var(--mu);font-size:14px}
+.chip.on{color:var(--ac2);background:var(--ac);border-color:transparent}
+#rlist{padding:8px 12px 140px}
 </style>
 </head>
 <body>
@@ -132,8 +140,10 @@ h1{font-size:30px}
     <input id="q" type="search" placeholder="Search your songs" aria-label="Search your songs">
     <label class="add">Add songs<input id="f" type="file" accept="audio/*,.opus,.lrc,.txt" multiple></label>
   </div>
+  <div class="tabs"><button class="tab on" id="tl">Library</button><button class="tab" id="tr">Radio</button></div>
+  <div id="chips" hidden></div>
 </header>
-<main id="list"></main>
+<main id="list"></main><main id="rlist" hidden></main>
 
 <div id="mini" hidden>
   <button id="mopen" aria-label="Open player"><span class="art" id="mart"></span><span class="tx"><b id="mt"></b><small id="ma"></small></span></button>
@@ -159,8 +169,8 @@ const $=s=>document.querySelector(s),au=new Audio();
 const P={play:'M8 5v14l11-7z',pause:'M6 5h4v14H6zM14 5h4v14h-4z',next:'M6 6l8.5 6L6 18zM16 6h2v12h-2z',prev:'M18 6l-8.5 6 8.5 6zM6 6h2v12H6z'};
 const ic=n=>`<svg class="ic" viewBox="0 0 24 24"><path d="${P[n]}"/></svg>`;
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmt=t=>isFinite(t)?Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0'):'0:00';
-let songs=[],cur=-1,shuf=false,rep=0,url=null;
+const fmt=t=>t===Infinity?'LIVE':isFinite(t)?Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0'):'0:00';
+let songs=[],cur=-1,shuf=false,rep=0,url=null,rd=null;
 const REP=['Repeat: off','Repeat: all','Repeat: one'];
 
 // Storage: songs are kept in IndexedDB so they stay after you close the app
@@ -184,7 +194,7 @@ function render(){
  ui()}
 
 function ui(){
- const s=songs[cur],p=!au.paused;
+ const s=rd||songs[cur],p=!au.paused;
  $('#mini').hidden=!s;
  $('#mt').textContent=$('#ft').textContent=s?s.title:'';
  $('#ma').textContent=$('#fa').textContent=s?s.artist:'';
@@ -195,18 +205,18 @@ function ui(){
  document.querySelectorAll('.row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===cur))}
 
 function play(i){
- const s=songs[i];if(!s)return;cur=i;
+ const s=songs[i];if(!s)return;cur=i;rd=null;
  if(url)URL.revokeObjectURL(url);
  url=URL.createObjectURL(s.blob);au.src=url;au.loop=rep===2;au.play().catch(()=>{});
  try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist,album:s.tl||'',artwork:s.artUrl?[{src:s.artUrl,sizes:'512x512',type:s.art.type}]:[]})}catch(e){}
  showLy();findLy(s);tint(s);ui()}
 function next(auto){
- if(!songs.length)return;
+ if(rd||!songs.length)return;
  let n=shuf&&songs.length>1?(()=>{let r;do r=Math.floor(Math.random()*songs.length);while(r===cur);return r})():cur+1;
  if(n>=songs.length){if(auto&&rep===0){au.pause();return ui()}n=0}
  play(n)}
-function prev(){if(au.currentTime>3||cur<=0)au.currentTime=0;else play(cur-1)}
-function toggle(){if(cur<0){play(0);return}au.paused?au.play().catch(()=>{}):au.pause()}
+function prev(){if(rd)return;if(au.currentTime>3||cur<=0)au.currentTime=0;else play(cur-1)}
+function toggle(){if(cur<0&&!rd){play(0);return}au.paused?au.play().catch(()=>{}):au.pause()}
 
 au.onended=()=>next(true);
 au.onplay=au.onpause=ui;
@@ -217,7 +227,7 @@ $('#shuf').onclick=()=>{shuf=!shuf;ui()};
 $('#rep').onclick=()=>{rep=(rep+1)%3;au.loop=rep===2;ui()};
 $('#mopen').onclick=()=>$('#full').classList.add('open');
 $('#close').onclick=()=>$('#full').classList.remove('open');
-$('#q').oninput=render;
+let qt,tab='lib',tag=0,stn=[];$('#q').oninput=()=>{if(tab==='lib')render();else{clearTimeout(qt);qt=setTimeout(loadRadio,450)}};
 $('#list').onclick=async e=>{
  const d=e.target.closest('.del'),p=e.target.closest('.pick');
  if(d){const id=+d.dataset.id,was=songs[cur]&&songs[cur].id;await tx('readwrite',s=>s.delete(id));
@@ -283,7 +293,7 @@ function lrc(t){const o=[];let sync=false;
   if(m.length){sync=true;for(const k of m)o.push({t:+k[1]*60+ +k[2],r:x,x:x.replace(/<\d+:\d+(?:\.\d+)?>/g,'').replace(/\s+/g,' ').trim()})}else if(x&&!/^\[/.test(ln))o.push({t:null,x})}
  if(!sync)return o;const s=o.filter(l=>l.t!==null).sort((a,b)=>a.t-b.t);s.forEach((l,i)=>l.w=words(l,i<s.length-1?s[i+1].t:l.t+5));return s}
 function showLy(){const s=songs[cur];L=s&&s.lrc?lrc(s.lrc):[];LI=-1;
- $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}" style="--i:${Math.min(i,10)}">${l.w&&l.w.length?l.w.map(w=>`<span class="w">${esc(w.x)}</span>`).join(' '):esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
+ $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}" style="--i:${Math.min(i,10)}">${l.w&&l.w.length?l.w.map(w=>`<span class="w">${esc(w.x)}</span>`).join(' '):esc(l.x||'♪')}</p>`).join(''):(rd?'<p class="no">Live radio has no lyrics.</p>':'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>')}
 function lyTick(){if(!L.length||L[0].t==null)return;
  const t=au.currentTime+.15;let i=L.findIndex(l=>l.t>t)-1;if(i===-2)i=L.length-1;
  if(i===LI)return;LI=i;const c=$('#lyr'),ps=c.children;[...ps].forEach((p,k)=>p.classList.toggle('on',k===i));
@@ -305,6 +315,33 @@ function tint(s){const f=$('#full');f.style.removeProperty('--tn');f.style.setPr
  const im=new Image();im.onload=()=>{try{const c=document.createElement('canvas');c.width=c.height=8;const x=c.getContext('2d');x.drawImage(im,0,0,8,8);
   const d=x.getImageData(0,0,8,8).data;let r=0,g=0,b=0;for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2]}const n=d.length/4;
   f.style.setProperty('--tn',`rgb(${r/n|0} ${g/n|0} ${b/n|0})`)}catch(e){}};im.src=s.artUrl}
+// ---- Radio tab (Radio Browser: free live stations, no key needed) ----
+const CH=[['Hindi',{language:'hindi'}],['Bollywood',{tag:'bollywood'}],['Punjabi',{language:'punjabi'}],['Lo-fi',{tag:'lofi'}],['Bhajan',{tag:'bhajan'}]];
+const RB='https://de1.api.radio-browser.info/json/';
+const sb=s=>{let h=0;for(const c of s.name)h=(h*31+c.charCodeAt(0))%360;const g=`linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h+55)%360} 75% 38%))`;
+ return s.favicon&&s.favicon.startsWith('https')?`url('${s.favicon.replace(/["']/g,c=>'%'+c.charCodeAt(0).toString(16))}') center/cover,${g}`:g};
+function chips(){$('#chips').innerHTML=CH.map((c,i)=>`<button class="chip${i===tag&&!$('#q').value?' on':''}" data-i="${i}">${c[0]}</button>`).join('')}
+function rr(){chips();$('#rlist').innerHTML=stn.length?stn.map((s,i)=>`<div class="row${rd&&rd.id===s.stationuuid?' cur':''}" data-i="${i}"><button class="pick"><span class="art" style="background:${sb(s)}"></span><span class="tx"><b>${esc(s.name.trim())}</b><small>${esc([s.country,(s.tags||'').split(',').slice(0,2).join(', '),s.bitrate?s.bitrate+' kbps':''].filter(Boolean).join(' · '))}</small></span></button></div>`).join(''):'<p class="empty">No stations found. Try another search.</p>'}
+async function loadRadio(){
+ const q=$('#q').value.trim(),p=new URLSearchParams({limit:60,hidebroken:'true',order:'clickcount',reverse:'true',is_https:'true'});
+ if(q)p.set('name',q);else for(const[k,v]of Object.entries(CH[tag][1]))p.set(k,v);
+ chips();$('#rlist').innerHTML='<p class="empty">Loading stations…</p>';
+ try{const j=await (await fetch(RB+'stations/search?'+p)).json();stn=j.filter(s=>s.url_resolved&&s.url_resolved.startsWith('https')&&!s.hls);rr()}
+ catch(e){$('#rlist').innerHTML='<p class="empty">Couldn’t load stations. Check your internet and try again.</p>'}}
+function playStation(s){
+ rd={id:s.stationuuid,title:s.name.trim(),artist:'Live radio'+(s.country?' · '+s.country:''),bg:sb(s)};cur=-1;
+ if(url){URL.revokeObjectURL(url);url=null}
+ au.src=s.url_resolved;au.loop=false;au.play().catch(()=>{});
+ fetch(RB+'url/'+s.stationuuid).catch(()=>{});
+ try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:rd.title,artist:rd.artist})}catch(e){}
+ showLy();tint(rd);rr();ui()}
+function setTab(t){tab=t;$('#tl').classList.toggle('on',t==='lib');$('#tr').classList.toggle('on',t==='rad');
+ $('#list').hidden=t!=='lib';$('#rlist').hidden=t!=='rad';$('#chips').hidden=t!=='rad';$('.add').hidden=t!=='lib';
+ $('#q').placeholder=t==='lib'?'Search your songs':'Search radio stations';$('#q').value='';
+ if(t==='lib')render();else if(stn.length)rr();else loadRadio()}
+$('#tl').onclick=()=>setTab('lib');$('#tr').onclick=()=>setTab('rad');
+$('#rlist').onclick=e=>{const r=e.target.closest('.row');if(r)playStation(stn[+r.dataset.i])};
+$('#chips').onclick=e=>{const c=e.target.closest('.chip');if(c){tag=+c.dataset.i;$('#q').value='';loadRadio()}};
 // Animated waveform seek bar: bars bounce while playing, tap or drag to seek
 let drag=false;const sk=$('#seek');
 function drawSeek(ts){requestAnimationFrame(drawSeek);if(!$('#full').classList.contains('open'))return;

@@ -63,6 +63,13 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 .ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
 .pill{border:1px solid var(--ln);border-radius:999px;padding:7px 12px;font-size:14px;color:var(--mu)}
 .pill.on{color:var(--ac2);background:var(--ac);border-color:var(--ac)}
+#disc.art i{inset:13%}#disc.art i::after{inset:46%}
+.tb{display:flex;justify-content:space-between;align-items:center;width:100%}
+#lyr{flex:1;width:100%;overflow-y:auto;position:relative;text-align:center;margin:10px 0;padding:30% 0;scrollbar-width:none}
+#lyr[hidden]{display:none}
+#lyr p{margin:0;padding:8px 6px;font-size:22px;font-weight:700;color:var(--mu);opacity:.55;transition:color .2s,opacity .2s}
+#lyr p.on{color:var(--tx);opacity:1}
+#lyr p.no{font-size:16px;font-weight:400}
 </style>
 </head>
 <body>
@@ -70,7 +77,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
   <div class="top"><div class="brand"><svg class="logo" viewBox="0 0 36 36" aria-hidden="true"><rect class="bg" width="36" height="36" rx="10"/><circle class="fg" cx="18" cy="18" r="11" stroke-width="2" opacity=".55"/><path class="fg" d="M13 16v4M18 12v12M23 15v6" stroke-width="3" stroke-linecap="round"/></svg><h1>Groove</h1></div><span id="cnt"></span></div>
   <div class="bar">
     <input id="q" type="search" placeholder="Search your songs" aria-label="Search your songs">
-    <label class="add">Add songs<input id="f" type="file" accept="audio/*" multiple></label>
+    <label class="add">Add songs<input id="f" type="file" accept="audio/*,.opus,.lrc,.txt" multiple></label>
   </div>
 </header>
 <main id="list"></main>
@@ -81,8 +88,8 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 </div>
 
 <section id="full" aria-label="Now playing">
-  <button id="close">Close</button>
-  <div id="disc"><i id="lab"></i></div>
+  <div class="tb"><button id="close">Close</button><button class="pill" id="lyb">Lyrics</button></div>
+  <div id="disc"><i id="lab"></i></div><div id="lyr" hidden></div>
   <div id="ft"></div><div id="fa"></div>
   <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
   <div class="tm"><span id="t1">0:00</span><span id="t2">0:00</span></div>
@@ -109,9 +116,12 @@ const db=new Promise(r=>{try{const q=indexedDB.open('groove',1);q.onupgradeneede
 async function tx(mode,fn){const d=await db;if(!d)return;return new Promise(r=>{try{const t=d.transaction('s',mode),o=fn(t.objectStore('s'));t.oncomplete=()=>r(o&&o.result);t.onerror=()=>r()}catch(e){r()}})}
 function parse(s){let n=s.name.replace(/\.[^.]+$/,'').replace(/_/g,' ').trim(),a='Unknown artist',i=n.indexOf(' - ');
  if(i>0){a=n.slice(0,i);n=n.slice(i+3)}
+ n=s.tt||n;a=s.ta||a;if(s.art)s.artUrl=URL.createObjectURL(s.art);
  let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;
- return{...s,title:n,artist:a,bg:`linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h+55)%360} 75% 38%))`}}
-async function load(){songs=((await tx('readonly',s=>s.getAll()))||[]).map(parse);cur=-1;render()}
+ return{...s,title:n,artist:a,bg:s.art?`url(${s.artUrl}) center/cover`:`linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h+55)%360} 75% 38%))`}}
+async function load(){const raw=(await tx('readonly',s=>s.getAll()))||[];
+ for(const s of raw)if(!s.tagged){Object.assign(s,await tags(s.blob,s.name));s.tagged=1;await tx('readwrite',st=>st.put(s))}
+ songs=raw.map(parse);cur=-1;render()}
 
 function render(){
  const q=$('#q').value.toLowerCase();
@@ -127,6 +137,7 @@ function ui(){
  $('#mt').textContent=$('#ft').textContent=s?s.title:'';
  $('#ma').textContent=$('#fa').textContent=s?s.artist:'';
  if(s){$('#mart').style.background=s.bg;$('#lab').style.background=s.bg}
+ $('#disc').classList.toggle('art',!!(s&&s.art));
  $('#mp').innerHTML=$('#fp').innerHTML=ic(p?'pause':'play');
  $('#prev').innerHTML=ic('prev');$('#next').innerHTML=ic('next');
  $('#disc').classList.toggle('on',p);
@@ -137,8 +148,8 @@ function play(i){
  const s=songs[i];if(!s)return;cur=i;
  if(url)URL.revokeObjectURL(url);
  url=URL.createObjectURL(s.blob);au.src=url;au.loop=rep===2;au.play().catch(()=>{});
- try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist})}catch(e){}
- ui()}
+ try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist,album:s.tl||'',artwork:s.artUrl?[{src:s.artUrl,sizes:'512x512',type:s.art.type}]:[]})}catch(e){}
+ showLy();findLy(s);ui()}
 function next(auto){
  if(!songs.length)return;
  let n=shuf&&songs.length>1?(()=>{let r;do r=Math.floor(Math.random()*songs.length);while(r===cur);return r})():cur+1;
@@ -149,7 +160,7 @@ function toggle(){if(cur<0){play(0);return}au.paused?au.play().catch(()=>{}):au.
 
 au.onended=()=>next(true);
 au.onplay=au.onpause=ui;
-au.ontimeupdate=()=>{const d=au.duration;$('#t1').textContent=fmt(au.currentTime);$('#t2').textContent=fmt(d);if(isFinite(d))$('#seek').value=au.currentTime/d*1000};
+au.ontimeupdate=()=>{lyTick();const d=au.duration;$('#t1').textContent=fmt(au.currentTime);$('#t2').textContent=fmt(d);if(isFinite(d))$('#seek').value=au.currentTime/d*1000};
 $('#seek').oninput=e=>{if(isFinite(au.duration))au.currentTime=e.target.value/1000*au.duration};
 $('#mp').onclick=$('#fp').onclick=toggle;
 $('#next').onclick=()=>next(false);$('#prev').onclick=prev;
@@ -165,11 +176,69 @@ $('#list').onclick=async e=>{
   await load();if(keep.length)cur=songs.findIndex(s=>s.id===was);ui()}
  else if(p)play(+p.closest('.row').dataset.i)};
 $('#f').onchange=async e=>{
- const files=[...e.target.files];
- for(const f of files)await tx('readwrite',s=>s.add({name:f.name,blob:f}));
+ const all=[...e.target.files],ly=all.filter(f=>/\.(lrc|txt)$/i.test(f.name));
+ for(const f of all)if(!ly.includes(f)){const T=await tags(f);await tx('readwrite',s=>s.add({name:f.name,blob:f,tagged:1,...T}))}
  const was=songs[cur]&&songs[cur].id;await load();
  if(was)cur=songs.findIndex(s=>s.id===was);
- e.target.value='';ui()};
+ for(const f of ly){const k=f.name.replace(/\.(lrc\.txt|lrc|txt)$/i,'').toLowerCase(),s=songs.find(x=>x.name.replace(/\.[^.]+$/,'').toLowerCase()===k);
+  if(s){s.lrc=await f.text();await tx('readwrite',st=>st.put(s))}}
+ showLy();e.target.value='';ui()};
+
+// ---- Tag reader: cover art, title, artist from MP3, FLAC, Opus/Ogg and M4A files ----
+const dec=(b,e='utf-8')=>new TextDecoder(e).decode(b),u32=(d,o)=>d.getUint32(o),l32=(d,o)=>d.getUint32(o,true);
+const dv=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);
+const cat=a=>{const r=new Uint8Array(a.reduce((n,x)=>n+x.length,0));let o=0;for(const x of a){r.set(x,o);o+=x.length}return r};
+function pic(b){const d=dv(b);let o=4;const ml=u32(d,o);o+=4;const mime=dec(b.subarray(o,o+ml));o+=ml;o+=4+u32(d,o)+16;const n=u32(d,o);o+=4;return new Blob([b.subarray(o,o+n)],{type:mime||'image/jpeg'})}
+function vorbis(b,o,T){const d=dv(b);o+=4+l32(d,o);let n=l32(d,o);o+=4;
+ while(n--&&o<b.length-4){const l=l32(d,o);o+=4;const s=dec(b.subarray(o,o+l));o+=l;const k=s.indexOf('=');if(k<0)continue;
+  const key=s.slice(0,k).toUpperCase(),v=s.slice(k+1);
+  if(key==='TITLE')T.tt=v;else if(key==='ARTIST')T.ta=v;else if(key==='ALBUM')T.tl=v;
+  else if(key==='METADATA_BLOCK_PICTURE'&&!T.art){try{T.art=pic(Uint8Array.from(atob(v),c=>c.charCodeAt(0)))}catch(e){}}}}
+function ogg(b,T){const pk=[];let cur=[],o=0;
+ while(o+27<=b.length&&b[o]===79&&pk.length<2){const ns=b[o+26],p=o+27+ns;let len=0;
+  for(let i=0;i<ns;i++){const s=b[o+27+i];cur.push(b.subarray(p+len,p+len+s));len+=s;if(s<255){pk.push(cat(cur));cur=[]}}
+  o=p+len}
+ const q=pk[1];if(!q)return;
+ if(dec(q.subarray(0,8))==='OpusTags')vorbis(q,8,T);else if(q[0]===3)vorbis(q,7,T)}
+function flac(b,T){let o=4;
+ for(;;){const h=b[o],t=h&127,n=(b[o+1]<<16)|(b[o+2]<<8)|b[o+3];o+=4;
+  if(t===4)vorbis(b,o,T);else if(t===6&&!T.art)T.art=pic(b.subarray(o,o+n));
+  o+=n;if(h&128||o>=b.length)break}}
+function id3(b,T){const d=dv(b),v=b[3],ss=o=>(b[o]<<21)|(b[o+1]<<14)|(b[o+2]<<7)|b[o+3];
+ const end=Math.min(10+ss(6),b.length);let o=10;
+ while(o+10<=end&&b[o]){const id=dec(b.subarray(o,o+4),'latin1'),sz=v===4?ss(o+4):u32(d,o+4),f=b.subarray(o+10,o+10+sz);o+=10+sz;
+  if(id==='APIC'&&!T.art){const e=f[0];let i=1;while(f[i])i++;const mime=dec(f.subarray(1,i),'latin1');i+=2;
+   if(e===1||e===2){while(i+1<f.length&&(f[i]||f[i+1]))i+=2;i+=2}else{while(f[i])i++;i++}
+   T.art=new Blob([f.subarray(i)],{type:mime.includes('/')?mime:'image/'+(mime||'jpeg')})}
+  else if(id==='TIT2'||id==='TPE1'||id==='TALB'){const e=f[0],t=dec(f.subarray(1),e===0?'latin1':e===1?'utf-16':e===2?'utf-16be':'utf-8').replace(/\0+$/,'');T[id==='TIT2'?'tt':id==='TPE1'?'ta':'tl']=t}}}
+function mp4(b,T){const at=k=>{const s=[...k].map(c=>c.charCodeAt(0));
+  for(let i=4;i<b.length-24;i++)if(b[i]===s[0]&&b[i+1]===s[1]&&b[i+2]===s[2]&&b[i+3]===s[3]){const z=((b[i+4]<<24)|(b[i+5]<<16)|(b[i+6]<<8)|b[i+7])>>>0;return b.subarray(i+20,i+4+z)}};
+ const str=k=>{const v=at(k);return v&&dec(v)};
+ T.tt=str('\xA9nam');T.ta=str('\xA9ART');T.tl=str('\xA9alb');
+ const c=at('covr');if(c)T.art=new Blob([c],{type:c[0]===137?'image/png':'image/jpeg'})}
+async function tags(f,name=f.name){const T={};
+ try{const b=new Uint8Array(await (/\.(m4a|mp4|aac)$/i.test(name)?f:f.slice(0,8e6)).arrayBuffer()),h=dec(b.subarray(0,4));
+  if(h.startsWith('ID3'))id3(b,T);else if(h==='fLaC')flac(b,T);else if(h==='OggS')ogg(b,T);else if(dec(b.subarray(4,8))==='ftyp')mp4(b,T)}catch(e){}
+ return T}
+
+// ---- Lyrics: parse .lrc, highlight the current line, look up online if missing ----
+let L=[],LI=-1;const tried=new Set();
+function lrc(t){const o=[];let sync=false;
+ for(const ln of t.split(/\r?\n/)){const m=[...ln.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)],x=ln.replace(/\[[^\]]*\]/g,'').trim();
+  if(m.length){sync=true;for(const k of m)o.push({t:+k[1]*60+ +k[2],x})}else if(x&&!/^\[/.test(ln))o.push({t:null,x})}
+ return sync?o.filter(l=>l.t!==null).sort((a,b)=>a.t-b.t):o}
+function showLy(){const s=songs[cur];L=s&&s.lrc?lrc(s.lrc):[];LI=-1;
+ $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}">${esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
+function lyTick(){if(!L.length||L[0].t==null)return;
+ const t=au.currentTime+.15;let i=L.findIndex(l=>l.t>t)-1;if(i===-2)i=L.length-1;
+ if(i===LI)return;LI=i;const c=$('#lyr'),ps=c.children;[...ps].forEach((p,k)=>p.classList.toggle('on',k===i));
+ const p=ps[i];if(p&&!c.hidden)c.scrollTo({top:p.offsetTop-c.clientHeight/2+p.offsetHeight/2,behavior:'smooth'})}
+async function findLy(s){if(s.lrc||tried.has(s.id)||!navigator.onLine)return;tried.add(s.id);
+ try{const q=new URLSearchParams({track_name:s.title.replace(/\(.*?\)|_/g,'').trim()});if(s.artist!=='Unknown artist')q.set('artist_name',s.artist);
+  const j=await (await fetch('https://lrclib.net/api/search?'+q)).json(),h=j.find(x=>x.syncedLyrics)||j.find(x=>x.plainLyrics);
+  if(h){s.lrc=h.syncedLyrics||h.plainLyrics;await tx('readwrite',st=>st.put(s));if(songs[cur]===s)showLy()}}catch(e){}}
+$('#lyb').onclick=()=>{const c=$('#lyr'),on=c.hidden;c.hidden=!on;$('#disc').hidden=on;$('#lyb').classList.toggle('on',on);LI=-9;if(on)lyTick()};
+$('#lyr').onclick=e=>{const p=e.target.closest('p[data-i]'),l=p&&L[+p.dataset.i];if(l&&l.t!=null)au.currentTime=l.t};
 
 // Lock-screen and notification controls
 try{if('mediaSession' in navigator){const m=navigator.mediaSession;

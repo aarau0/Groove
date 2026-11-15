@@ -50,12 +50,6 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 #full{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;align-items:center;padding:calc(16px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));transform:translateY(100%);transition:transform .3s;visibility:hidden}
 #full.open{transform:none;visibility:visible}
 #close{align-self:flex-start;color:var(--mu);padding:8px 0}
-#disc{width:min(72vw,300px);aspect-ratio:1;border-radius:50%;margin:auto;position:relative;background:repeating-radial-gradient(circle,#0c0b10 0 2px,#1a1822 2px 4px);box-shadow:0 18px 40px rgba(0,0,0,.35);animation:spin 9s linear infinite;animation-play-state:paused}
-#disc.on{animation-play-state:running}
-#disc i{position:absolute;inset:32%;border-radius:50%;box-shadow:0 0 0 6px #0c0b10}
-#disc i::after{content:"";position:absolute;inset:42%;border-radius:50%;background:var(--bg)}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){#disc{animation:none}#full{transition:none}}
 #ft{font-size:22px;font-weight:800;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fa{color:var(--mu);margin-bottom:14px}
 #seek{width:100%;accent-color:var(--ac)}
@@ -63,13 +57,19 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 .ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
 .pill{border:1px solid var(--ln);border-radius:999px;padding:7px 12px;font-size:14px;color:var(--mu)}
 .pill.on{color:var(--ac2);background:var(--ac);border-color:var(--ac)}
-#disc.art i{inset:13%}#disc.art i::after{inset:46%}
 .tb{display:flex;justify-content:space-between;align-items:center;width:100%}
-#lyr{flex:1;width:100%;overflow-y:auto;position:relative;text-align:center;margin:10px 0;padding:30% 0;scrollbar-width:none}
-#lyr[hidden]{display:none}
-#lyr p{margin:0;padding:8px 6px;font-size:22px;font-weight:700;color:var(--mu);opacity:.55;transition:color .2s,opacity .2s}
+.cw{max-height:calc(min(78vw,340px) + 12px);overflow:hidden;margin:auto 0;padding:6px;transition:max-height .45s cubic-bezier(.3,.7,.2,1),opacity .3s,margin .45s,padding .45s}
+#cover{width:min(78vw,340px);aspect-ratio:1;border-radius:18px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
+#full{background:linear-gradient(180deg,color-mix(in srgb,var(--tn,var(--bg)) 45%,var(--bg)),var(--bg) 70%)}
+#full.ly .cw{max-height:0;opacity:0;margin:0;padding:0}
+#lyr{flex:0 1 0;flex-grow:0;width:100%;overflow-y:auto;position:relative;text-align:center;padding:0;opacity:0;transform:translateY(28px);pointer-events:none;scrollbar-width:none;transition:flex-grow .45s cubic-bezier(.3,.7,.2,1),opacity .35s .1s,transform .45s,padding .45s}
+#full.ly #lyr{flex-grow:1;opacity:1;transform:none;pointer-events:auto;padding:30% 0}
+#lyr p{margin:0;padding:8px 6px;font-size:22px;font-weight:700;color:var(--mu);opacity:.55;transition:color .25s,opacity .25s}
 #lyr p.on{color:var(--tx);opacity:1}
 #lyr p.no{font-size:16px;font-weight:400}
+#full.ly #lyr p{animation:lin .5s backwards;animation-delay:calc(var(--i,0)*40ms + .15s)}
+@keyframes lin{from{opacity:0;transform:translateY(18px)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -89,7 +89,7 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 
 <section id="full" aria-label="Now playing">
   <div class="tb"><button id="close">Close</button><button class="pill" id="lyb">Lyrics</button></div>
-  <div id="disc"><i id="lab"></i></div><div id="lyr" hidden></div>
+  <div class="cw"><div id="cover"></div></div><div id="lyr"></div>
   <div id="ft"></div><div id="fa"></div>
   <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
   <div class="tm"><span id="t1">0:00</span><span id="t2">0:00</span></div>
@@ -136,11 +136,9 @@ function ui(){
  $('#mini').hidden=!s;
  $('#mt').textContent=$('#ft').textContent=s?s.title:'';
  $('#ma').textContent=$('#fa').textContent=s?s.artist:'';
- if(s){$('#mart').style.background=s.bg;$('#lab').style.background=s.bg}
- $('#disc').classList.toggle('art',!!(s&&s.art));
+ if(s){$('#mart').style.background=s.bg;$('#cover').style.background=s.bg}
  $('#mp').innerHTML=$('#fp').innerHTML=ic(p?'pause':'play');
  $('#prev').innerHTML=ic('prev');$('#next').innerHTML=ic('next');
- $('#disc').classList.toggle('on',p);
  $('#shuf').classList.toggle('on',shuf);$('#rep').classList.toggle('on',rep>0);$('#rep').textContent=REP[rep];
  document.querySelectorAll('.row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===cur))}
 
@@ -149,7 +147,7 @@ function play(i){
  if(url)URL.revokeObjectURL(url);
  url=URL.createObjectURL(s.blob);au.src=url;au.loop=rep===2;au.play().catch(()=>{});
  try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist,album:s.tl||'',artwork:s.artUrl?[{src:s.artUrl,sizes:'512x512',type:s.art.type}]:[]})}catch(e){}
- showLy();findLy(s);ui()}
+ showLy();findLy(s);tint(s);ui()}
 function next(auto){
  if(!songs.length)return;
  let n=shuf&&songs.length>1?(()=>{let r;do r=Math.floor(Math.random()*songs.length);while(r===cur);return r})():cur+1;
@@ -228,18 +226,23 @@ function lrc(t){const o=[];let sync=false;
   if(m.length){sync=true;for(const k of m)o.push({t:+k[1]*60+ +k[2],x})}else if(x&&!/^\[/.test(ln))o.push({t:null,x})}
  return sync?o.filter(l=>l.t!==null).sort((a,b)=>a.t-b.t):o}
 function showLy(){const s=songs[cur];L=s&&s.lrc?lrc(s.lrc):[];LI=-1;
- $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}">${esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
+ $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}" style="--i:${Math.min(i,10)}">${esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
 function lyTick(){if(!L.length||L[0].t==null)return;
  const t=au.currentTime+.15;let i=L.findIndex(l=>l.t>t)-1;if(i===-2)i=L.length-1;
  if(i===LI)return;LI=i;const c=$('#lyr'),ps=c.children;[...ps].forEach((p,k)=>p.classList.toggle('on',k===i));
- const p=ps[i];if(p&&!c.hidden)c.scrollTo({top:p.offsetTop-c.clientHeight/2+p.offsetHeight/2,behavior:'smooth'})}
+ const p=ps[i];if(p&&$('#full').classList.contains('ly'))c.scrollTo({top:p.offsetTop-c.clientHeight/2+p.offsetHeight/2,behavior:'smooth'})}
 async function findLy(s){if(s.lrc||tried.has(s.id)||!navigator.onLine)return;tried.add(s.id);
  try{const q=new URLSearchParams({track_name:s.title.replace(/\(.*?\)|_/g,'').trim()});if(s.artist!=='Unknown artist')q.set('artist_name',s.artist);
   const j=await (await fetch('https://lrclib.net/api/search?'+q)).json(),h=j.find(x=>x.syncedLyrics)||j.find(x=>x.plainLyrics);
   if(h){s.lrc=h.syncedLyrics||h.plainLyrics;await tx('readwrite',st=>st.put(s));if(songs[cur]===s)showLy()}}catch(e){}}
-$('#lyb').onclick=()=>{const c=$('#lyr'),on=c.hidden;c.hidden=!on;$('#disc').hidden=on;$('#lyb').classList.toggle('on',on);LI=-9;if(on)lyTick()};
+$('#lyb').onclick=()=>{const f=$('#full'),on=!f.classList.contains('ly');f.classList.toggle('ly',on);$('#lyb').classList.toggle('on',on);LI=-9;if(on)setTimeout(lyTick,480)};
 $('#lyr').onclick=e=>{const p=e.target.closest('p[data-i]'),l=p&&L[+p.dataset.i];if(l&&l.t!=null)au.currentTime=l.t};
 
+// Tint the player with the cover's average colour
+function tint(s){const f=$('#full');f.style.removeProperty('--tn');if(!s.art)return;
+ const im=new Image();im.onload=()=>{try{const c=document.createElement('canvas');c.width=c.height=8;const x=c.getContext('2d');x.drawImage(im,0,0,8,8);
+  const d=x.getImageData(0,0,8,8).data;let r=0,g=0,b=0;for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2]}const n=d.length/4;
+  f.style.setProperty('--tn',`rgb(${r/n|0} ${g/n|0} ${b/n|0})`)}catch(e){}};im.src=s.artUrl}
 // Lock-screen and notification controls
 try{if('mediaSession' in navigator){const m=navigator.mediaSession;
  m.setActionHandler('play',toggle);m.setActionHandler('pause',toggle);

@@ -52,7 +52,6 @@ h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
 #close{align-self:flex-start;color:var(--mu);padding:8px 0}
 #ft{font-size:22px;font-weight:800;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #fa{color:var(--mu);margin-bottom:14px}
-#seek{width:100%;accent-color:var(--ac)}
 .tm{display:flex;justify-content:space-between;width:100%;color:var(--mu);font-size:13px}
 .ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
 .pill{border:1px solid var(--ln);border-radius:999px;padding:7px 12px;font-size:14px;color:var(--mu)}
@@ -101,15 +100,29 @@ h1{font-size:30px}
 .ctl{gap:18px;margin-top:20px}
 .ctl.sub{gap:12px;margin-top:14px}
 #ft{font-size:25px}
-#seek{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:linear-gradient(90deg,var(--ac) var(--v,0%),rgba(255,255,255,.16) var(--v,0%))}
-#seek::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 0 14px var(--ac)}
-#seek::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;background:#fff}
 #lyr p{font-size:27px;line-height:1.22;font-weight:800;filter:blur(1.4px);transition:color .25s,opacity .25s,filter .25s}
 #lyr p.on{filter:none;text-shadow:0 0 28px rgba(255,155,84,.6)}
 #lyr p.no{font-size:16px;font-weight:400;filter:none}
 #lyr p{transition:color .25s,opacity .25s,filter .25s,transform .35s}
 #lyr p.on{filter:drop-shadow(0 0 14px rgba(255,155,84,.55));text-shadow:none;transform:scale(1.04)}
 #lyr p.on .w{display:inline-block;color:transparent;background:linear-gradient(90deg,#fff calc(var(--f,0)*120% - 20%),rgba(255,255,255,.35) calc(var(--f,0)*120%));-webkit-background-clip:text;background-clip:text}
+#seek{display:block;width:100%;height:56px;touch-action:none;cursor:pointer}
+/* Landscape: cover and controls on the left, lyrics slide in on the right */
+@media (min-aspect-ratio:1/1){
+#full{--cs:min(38vw,clamp(110px,calc(100vh - 360px),360px));display:grid;grid-template-columns:1fr 0fr;grid-template-rows:auto minmax(0,1fr) repeat(6,auto);justify-items:center;align-items:center;transition:transform .3s,grid-template-columns .7s cubic-bezier(.3,.7,.2,1),column-gap .7s}
+#full.ly{grid-template-columns:1fr 1fr;column-gap:32px}
+.tb{grid-area:1/1/2/3;justify-self:stretch}
+.cw{grid-area:2/1;max-height:calc(var(--cs) + 12px)}
+#cover{width:var(--cs)}
+#ft{grid-area:3/1}#fa{grid-area:4/1}
+#seek{grid-area:5/1;width:min(100%,440px);height:48px}
+.tm{grid-area:6/1;width:min(100%,440px)}
+.ctl{grid-area:7/1;margin-top:10px}
+.ctl.sub{grid-area:8/1;margin-top:10px}
+#full.ly .cw{max-height:calc(var(--cs) + 12px);opacity:1;margin:0;padding:6px}
+#full #lyr{grid-area:2/2/9/3;align-self:stretch;min-width:0;transform:translateX(80px);padding:22vh 0;transition:opacity .5s .2s,transform .7s cubic-bezier(.3,.7,.2,1),padding .45s}
+#full.ly #lyr{transform:none;padding:22vh 0}
+}
 </style>
 </head>
 <body>
@@ -131,7 +144,7 @@ h1{font-size:30px}
   <div class="tb"><button class="pill" id="close">Close</button><button class="pill" id="lyb">Lyrics</button></div>
   <div class="cw"><div id="cover"></div></div><div id="lyr"></div>
   <div id="ft"></div><div id="fa"></div>
-  <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+  <canvas id="seek" role="slider" aria-label="Seek"></canvas>
   <div class="tm"><span id="t1">0:00</span><span id="t2">0:00</span></div>
   <div class="ctl">
     <button id="prev" aria-label="Previous song"></button>
@@ -197,8 +210,7 @@ function toggle(){if(cur<0){play(0);return}au.paused?au.play().catch(()=>{}):au.
 
 au.onended=()=>next(true);
 au.onplay=au.onpause=ui;
-au.ontimeupdate=()=>{lyTick();const d=au.duration;$('#t1').textContent=fmt(au.currentTime);$('#t2').textContent=fmt(d);if(isFinite(d)){const v=au.currentTime/d*100;$('#seek').value=v*10;$('#seek').style.setProperty('--v',v+'%');$('#mini').style.setProperty('--p',v+'%')}};
-$('#seek').oninput=e=>{e.target.style.setProperty('--v',e.target.value/10+'%');if(isFinite(au.duration))au.currentTime=e.target.value/1000*au.duration};
+au.ontimeupdate=()=>{lyTick();const d=au.duration;$('#t1').textContent=fmt(au.currentTime);$('#t2').textContent=fmt(d);if(isFinite(d))$('#mini').style.setProperty('--p',au.currentTime/d*100+'%')};
 $('#mp').onclick=$('#fp').onclick=toggle;
 $('#next').onclick=()=>next(false);$('#prev').onclick=prev;
 $('#shuf').onclick=()=>{shuf=!shuf;ui()};
@@ -285,7 +297,7 @@ let rf=0;
 function fill(){const l=L[LI];if(!l||!l.w)return;const p=$('#lyr').children[LI];if(!p)return;const t=au.currentTime+.04,s=p._s||(p._s=[...p.querySelectorAll('.w')]);
  l.w.forEach((w,i)=>{if(s[i])s[i].style.setProperty('--f',Math.max(0,Math.min(1,(t-w.t)/(w.e-w.t||.01))))})}
 function loop(){lyTick();fill();rf=requestAnimationFrame(loop)}
-$('#lyb').onclick=()=>{const f=$('#full'),on=!f.classList.contains('ly');f.classList.toggle('ly',on);$('#lyb').classList.toggle('on',on);LI=-9;cancelAnimationFrame(rf);if(on){loop();setTimeout(()=>{LI=-9},480)}};
+$('#lyb').onclick=()=>{const f=$('#full'),on=!f.classList.contains('ly');f.classList.toggle('ly',on);$('#lyb').classList.toggle('on',on);LI=-9;cancelAnimationFrame(rf);if(on){loop();setTimeout(()=>{LI=-9},760)}};
 $('#lyr').onclick=e=>{const p=e.target.closest('p[data-i]'),l=p&&L[+p.dataset.i];if(l&&l.t!=null)au.currentTime=l.t};
 
 // Tint the player with the cover's average colour
@@ -293,6 +305,23 @@ function tint(s){const f=$('#full');f.style.removeProperty('--tn');f.style.setPr
  const im=new Image();im.onload=()=>{try{const c=document.createElement('canvas');c.width=c.height=8;const x=c.getContext('2d');x.drawImage(im,0,0,8,8);
   const d=x.getImageData(0,0,8,8).data;let r=0,g=0,b=0;for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2]}const n=d.length/4;
   f.style.setProperty('--tn',`rgb(${r/n|0} ${g/n|0} ${b/n|0})`)}catch(e){}};im.src=s.artUrl}
+// Animated waveform seek bar: bars bounce while playing, tap or drag to seek
+let drag=false;const sk=$('#seek');
+function drawSeek(ts){requestAnimationFrame(drawSeek);if(!$('#full').classList.contains('open'))return;
+ const dp=devicePixelRatio||1,w=Math.round(sk.clientWidth*dp),h=Math.round(sk.clientHeight*dp);if(!w||!h)return;
+ if(sk.width!==w||sk.height!==h){sk.width=w;sk.height=h}
+ const x=sk.getContext('2d'),n=Math.max(24,Math.floor(sk.clientWidth/8)),bw=w/n,d=au.duration,p=isFinite(d)&&d?au.currentTime/d:0,pl=!au.paused,t=ts/1000,sd=songs[cur]?songs[cur].id:1,k=Math.floor(p*n);
+ x.clearRect(0,0,w,h);x.lineCap='round';x.lineWidth=bw*.5;
+ const hs=[];for(let i=0;i<n;i++){const b=.3+.5*Math.abs(Math.sin(i*.45+sd))*Math.abs(Math.cos(i*.13+sd*1.7))+.2*Math.abs(Math.sin(i*7.3+sd*3.1));hs.push(Math.min(1,b+(pl?.12*Math.sin(t*5+i*.7):0))*h*.85)}
+ const path=f=>{const q=new Path2D();for(let i=0;i<n;i++)if(f(i)){const cx=bw*(i+.5);q.moveTo(cx,(h-hs[i])/2);q.lineTo(cx,(h+hs[i])/2)}return q};
+ x.shadowBlur=0;x.strokeStyle='rgba(255,255,255,.22)';x.stroke(path(i=>i>k));
+ x.strokeStyle='#ffa45c';x.shadowColor='rgba(255,140,70,.9)';x.shadowBlur=10*dp;x.stroke(path(i=>i<k));
+ x.strokeStyle='#fff';x.shadowBlur=16*dp;x.stroke(path(i=>i===k))}
+const seekTo=e=>{const r=sk.getBoundingClientRect();if(isFinite(au.duration))au.currentTime=Math.min(1,Math.max(0,(e.clientX-r.left)/r.width))*au.duration};
+sk.onpointerdown=e=>{drag=true;sk.setPointerCapture(e.pointerId);seekTo(e)};
+sk.onpointermove=e=>{if(drag)seekTo(e)};
+sk.onpointerup=sk.onpointercancel=()=>{drag=false};
+requestAnimationFrame(drawSeek);
 // Lock-screen and notification controls
 try{if('mediaSession' in navigator){const m=navigator.mediaSession;
  m.setActionHandler('play',toggle);m.setActionHandler('pause',toggle);

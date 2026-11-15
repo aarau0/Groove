@@ -107,6 +107,9 @@ h1{font-size:30px}
 #lyr p{font-size:27px;line-height:1.22;font-weight:800;filter:blur(1.4px);transition:color .25s,opacity .25s,filter .25s}
 #lyr p.on{filter:none;text-shadow:0 0 28px rgba(255,155,84,.6)}
 #lyr p.no{font-size:16px;font-weight:400;filter:none}
+#lyr p{transition:color .25s,opacity .25s,filter .25s,transform .35s}
+#lyr p.on{filter:drop-shadow(0 0 14px rgba(255,155,84,.55));text-shadow:none;transform:scale(1.04)}
+#lyr p.on .w{display:inline-block;color:transparent;background:linear-gradient(90deg,#fff calc(var(--f,0)*120% - 20%),rgba(255,255,255,.35) calc(var(--f,0)*120%));-webkit-background-clip:text;background-clip:text}
 </style>
 </head>
 <body>
@@ -257,12 +260,18 @@ async function tags(f,name=f.name){const T={};
 
 // ---- Lyrics: parse .lrc, highlight the current line, look up online if missing ----
 let L=[],LI=-1;const tried=new Set();
+function words(l,end){
+ const em=[...l.r.matchAll(/<(\d+):(\d+(?:\.\d+)?)>([^<]*)/g)];
+ if(em.length){const a=em.map(m=>({t:+m[1]*60+ +m[2],x:m[3].trim()})).filter(w=>w.x);a.forEach((w,i)=>w.e=i<a.length-1?a[i+1].t:Math.min(end,w.t+1.2));return a}
+ const ws=l.x.split(' ').filter(Boolean);if(!ws.length)return[];
+ const dur=Math.max(.4,Math.min(end-l.t-.1,ws.length*.55+.5)),tot=ws.reduce((n,w)=>n+w.length+1,0);let c=l.t;
+ return ws.map(x=>{const d=dur*(x.length+1)/tot,w={t:c,e:c+d,x};c+=d;return w})}
 function lrc(t){const o=[];let sync=false;
  for(const ln of t.split(/\r?\n/)){const m=[...ln.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)],x=ln.replace(/\[[^\]]*\]/g,'').trim();
-  if(m.length){sync=true;for(const k of m)o.push({t:+k[1]*60+ +k[2],x})}else if(x&&!/^\[/.test(ln))o.push({t:null,x})}
- return sync?o.filter(l=>l.t!==null).sort((a,b)=>a.t-b.t):o}
+  if(m.length){sync=true;for(const k of m)o.push({t:+k[1]*60+ +k[2],r:x,x:x.replace(/<\d+:\d+(?:\.\d+)?>/g,'').replace(/\s+/g,' ').trim()})}else if(x&&!/^\[/.test(ln))o.push({t:null,x})}
+ if(!sync)return o;const s=o.filter(l=>l.t!==null).sort((a,b)=>a.t-b.t);s.forEach((l,i)=>l.w=words(l,i<s.length-1?s[i+1].t:l.t+5));return s}
 function showLy(){const s=songs[cur];L=s&&s.lrc?lrc(s.lrc):[];LI=-1;
- $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}" style="--i:${Math.min(i,10)}">${esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
+ $('#lyr').innerHTML=L.length?L.map((l,i)=>`<p data-i="${i}" style="--i:${Math.min(i,10)}">${l.w&&l.w.length?l.w.map(w=>`<span class="w">${esc(w.x)}</span>`).join(' '):esc(l.x||'♪')}</p>`).join(''):'<p class="no">No lyrics yet. Pick this song’s .lrc file with Add songs.</p>'}
 function lyTick(){if(!L.length||L[0].t==null)return;
  const t=au.currentTime+.15;let i=L.findIndex(l=>l.t>t)-1;if(i===-2)i=L.length-1;
  if(i===LI)return;LI=i;const c=$('#lyr'),ps=c.children;[...ps].forEach((p,k)=>p.classList.toggle('on',k===i));
@@ -271,7 +280,12 @@ async function findLy(s){if(s.lrc||tried.has(s.id)||!navigator.onLine)return;tri
  try{const q=new URLSearchParams({track_name:s.title.replace(/\(.*?\)|_/g,'').trim()});if(s.artist!=='Unknown artist')q.set('artist_name',s.artist);
   const j=await (await fetch('https://lrclib.net/api/search?'+q)).json(),h=j.find(x=>x.syncedLyrics)||j.find(x=>x.plainLyrics);
   if(h){s.lrc=h.syncedLyrics||h.plainLyrics;await tx('readwrite',st=>st.put(s));if(songs[cur]===s)showLy()}}catch(e){}}
-$('#lyb').onclick=()=>{const f=$('#full'),on=!f.classList.contains('ly');f.classList.toggle('ly',on);$('#lyb').classList.toggle('on',on);LI=-9;if(on)setTimeout(lyTick,480)};
+// Word-by-word fill for the current line, updated every frame
+let rf=0;
+function fill(){const l=L[LI];if(!l||!l.w)return;const p=$('#lyr').children[LI];if(!p)return;const t=au.currentTime+.04,s=p._s||(p._s=[...p.querySelectorAll('.w')]);
+ l.w.forEach((w,i)=>{if(s[i])s[i].style.setProperty('--f',Math.max(0,Math.min(1,(t-w.t)/(w.e-w.t||.01))))})}
+function loop(){lyTick();fill();rf=requestAnimationFrame(loop)}
+$('#lyb').onclick=()=>{const f=$('#full'),on=!f.classList.contains('ly');f.classList.toggle('ly',on);$('#lyb').classList.toggle('on',on);LI=-9;cancelAnimationFrame(rf);if(on){loop();setTimeout(()=>{LI=-9},480)}};
 $('#lyr').onclick=e=>{const p=e.target.closest('p[data-i]'),l=p&&L[+p.dataset.i];if(l&&l.t!=null)au.currentTime=l.t};
 
 // Tint the player with the cover's average colour

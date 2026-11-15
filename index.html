@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Groove – Music Player</title>
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#14121a">
+<style>
+:root{--bg:#f5f3f8;--sf:#fff;--tx:#1a1822;--mu:#6f6a80;--ac:#c2410c;--ac2:#fff;--ln:#e2dee9;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14121a;--sf:#201d29;--tx:#f1eef6;--mu:#9a94ad;--ac:#ff9b54;--ac2:#1b1008;--ln:#2e2a3a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14121a;--sf:#201d29;--tx:#f1eef6;--mu:#9a94ad;--ac:#ff9b54;--ac2:#1b1008;--ln:#2e2a3a;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 "Avenir Next","Segoe UI",system-ui,sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid var(--ac);outline-offset:2px}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:14px 16px 10px;z-index:5;border-bottom:1px solid var(--ln)}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+h1{margin:0;font-size:28px;letter-spacing:-.02em;font-weight:800}
+#cnt{color:var(--mu);font-size:14px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:38px;height:38px;flex:none}
+.logo .bg{fill:var(--ac)}
+.logo .fg{stroke:var(--ac2);fill:none}
+.bar{display:flex;gap:8px;margin-top:10px}
+#q{flex:1;min-width:0;background:var(--sf);color:var(--tx);border:1px solid var(--ln);border-radius:12px;padding:10px 12px;font:inherit}
+.add{background:var(--ac);color:var(--ac2);font-weight:700;border-radius:12px;padding:10px 14px;cursor:pointer;white-space:nowrap}
+#f{position:absolute;opacity:0;width:1px;height:1px}
+#list{padding:6px 8px 130px}
+.row{display:flex;align-items:center;border-radius:12px}
+.row.cur{background:var(--sf)}
+.row.cur b{color:var(--ac)}
+.pick{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:10px 8px;text-align:left}
+.art{flex:none;width:46px;height:46px;border-radius:10px}
+.tx{min-width:0;display:flex;flex-direction:column}
+.tx b,.tx small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx small{color:var(--mu)}
+.del{color:var(--mu);font-size:22px;padding:8px 14px}
+.empty{color:var(--mu);text-align:center;padding:60px 28px}
+#mini{position:fixed;left:0;right:0;bottom:0;background:var(--sf);border-top:1px solid var(--ln);display:flex;align-items:center;gap:12px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));z-index:6}
+#mini[hidden]{display:none}
+#mopen{flex:1;min-width:0;display:flex;align-items:center;gap:12px;text-align:left}
+.ic{width:28px;height:28px;fill:currentColor}
+.pbtn{background:var(--ac);color:var(--ac2);border-radius:50%;width:48px;height:48px;display:grid;place-items:center}
+#full{position:fixed;inset:0;background:var(--bg);z-index:20;display:flex;flex-direction:column;align-items:center;padding:calc(16px + env(safe-area-inset-top,0px)) 24px calc(24px + env(safe-area-inset-bottom,0px));transform:translateY(100%);transition:transform .3s;visibility:hidden}
+#full.open{transform:none;visibility:visible}
+#close{align-self:flex-start;color:var(--mu);padding:8px 0}
+#disc{width:min(72vw,300px);aspect-ratio:1;border-radius:50%;margin:auto;position:relative;background:repeating-radial-gradient(circle,#0c0b10 0 2px,#1a1822 2px 4px);box-shadow:0 18px 40px rgba(0,0,0,.35);animation:spin 9s linear infinite;animation-play-state:paused}
+#disc.on{animation-play-state:running}
+#disc i{position:absolute;inset:32%;border-radius:50%;box-shadow:0 0 0 6px #0c0b10}
+#disc i::after{content:"";position:absolute;inset:42%;border-radius:50%;background:var(--bg)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#disc{animation:none}#full{transition:none}}
+#ft{font-size:22px;font-weight:800;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fa{color:var(--mu);margin-bottom:14px}
+#seek{width:100%;accent-color:var(--ac)}
+.tm{display:flex;justify-content:space-between;width:100%;color:var(--mu);font-size:13px}
+.ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
+.pill{border:1px solid var(--ln);border-radius:999px;padding:7px 12px;font-size:14px;color:var(--mu)}
+.pill.on{color:var(--ac2);background:var(--ac);border-color:var(--ac)}
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><div class="brand"><svg class="logo" viewBox="0 0 36 36" aria-hidden="true"><rect class="bg" width="36" height="36" rx="10"/><circle class="fg" cx="18" cy="18" r="11" stroke-width="2" opacity=".55"/><path class="fg" d="M13 16v4M18 12v12M23 15v6" stroke-width="3" stroke-linecap="round"/></svg><h1>Groove</h1></div><span id="cnt"></span></div>
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search your songs" aria-label="Search your songs">
+    <label class="add">Add songs<input id="f" type="file" accept="audio/*" multiple></label>
+  </div>
+</header>
+<main id="list"></main>
+
+<div id="mini" hidden>
+  <button id="mopen" aria-label="Open player"><span class="art" id="mart"></span><span class="tx"><b id="mt"></b><small id="ma"></small></span></button>
+  <button class="pbtn" id="mp" aria-label="Play or pause"></button>
+</div>
+
+<section id="full" aria-label="Now playing">
+  <button id="close">Close</button>
+  <div id="disc"><i id="lab"></i></div>
+  <div id="ft"></div><div id="fa"></div>
+  <input id="seek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+  <div class="tm"><span id="t1">0:00</span><span id="t2">0:00</span></div>
+  <div class="ctl">
+    <button class="pill" id="shuf">Shuffle</button>
+    <button id="prev" aria-label="Previous song"></button>
+    <button class="pbtn" id="fp" aria-label="Play or pause"></button>
+    <button id="next" aria-label="Next song"></button>
+    <button class="pill" id="rep">Repeat: off</button>
+  </div>
+</section>
+
+<script>
+const $=s=>document.querySelector(s),au=new Audio();
+const P={play:'M8 5v14l11-7z',pause:'M6 5h4v14H6zM14 5h4v14h-4z',next:'M6 6l8.5 6L6 18zM16 6h2v12h-2z',prev:'M18 6l-8.5 6 8.5 6zM6 6h2v12H6z'};
+const ic=n=>`<svg class="ic" viewBox="0 0 24 24"><path d="${P[n]}"/></svg>`;
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=t=>isFinite(t)?Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0'):'0:00';
+let songs=[],cur=-1,shuf=false,rep=0,url=null;
+const REP=['Repeat: off','Repeat: all','Repeat: one'];
+
+// Storage: songs are kept in IndexedDB so they stay after you close the app
+const db=new Promise(r=>{try{const q=indexedDB.open('groove',1);q.onupgradeneeded=()=>q.result.createObjectStore('s',{keyPath:'id',autoIncrement:true});q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)}catch(e){r(null)}});
+async function tx(mode,fn){const d=await db;if(!d)return;return new Promise(r=>{try{const t=d.transaction('s',mode),o=fn(t.objectStore('s'));t.oncomplete=()=>r(o&&o.result);t.onerror=()=>r()}catch(e){r()}})}
+function parse(s){let n=s.name.replace(/\.[^.]+$/,'').replace(/_/g,' ').trim(),a='Unknown artist',i=n.indexOf(' - ');
+ if(i>0){a=n.slice(0,i);n=n.slice(i+3)}
+ let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;
+ return{...s,title:n,artist:a,bg:`linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h+55)%360} 75% 38%))`}}
+async function load(){songs=((await tx('readonly',s=>s.getAll()))||[]).map(parse);cur=-1;render()}
+
+function render(){
+ const q=$('#q').value.toLowerCase();
+ const h=songs.map((s,i)=>[s,i]).filter(([s])=>(s.title+s.artist).toLowerCase().includes(q)).map(([s,i])=>
+ `<div class="row" data-i="${i}"><button class="pick"><span class="art" style="background:${s.bg}"></span><span class="tx"><b>${esc(s.title)}</b><small>${esc(s.artist)}</small></span></button><button class="del" data-id="${s.id}" aria-label="Remove ${esc(s.title)}">×</button></div>`).join('');
+ $('#list').innerHTML=h||`<p class="empty">${songs.length?'No songs match your search.':'Your library is empty. Tap Add songs and pick music from your phone.'}</p>`;
+ $('#cnt').textContent=songs.length?songs.length+(songs.length>1?' songs':' song'):'';
+ ui()}
+
+function ui(){
+ const s=songs[cur],p=!au.paused;
+ $('#mini').hidden=!s;
+ $('#mt').textContent=$('#ft').textContent=s?s.title:'';
+ $('#ma').textContent=$('#fa').textContent=s?s.artist:'';
+ if(s){$('#mart').style.background=s.bg;$('#lab').style.background=s.bg}
+ $('#mp').innerHTML=$('#fp').innerHTML=ic(p?'pause':'play');
+ $('#prev').innerHTML=ic('prev');$('#next').innerHTML=ic('next');
+ $('#disc').classList.toggle('on',p);
+ $('#shuf').classList.toggle('on',shuf);$('#rep').classList.toggle('on',rep>0);$('#rep').textContent=REP[rep];
+ document.querySelectorAll('.row').forEach(r=>r.classList.toggle('cur',+r.dataset.i===cur))}
+
+function play(i){
+ const s=songs[i];if(!s)return;cur=i;
+ if(url)URL.revokeObjectURL(url);
+ url=URL.createObjectURL(s.blob);au.src=url;au.loop=rep===2;au.play().catch(()=>{});
+ try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:s.title,artist:s.artist})}catch(e){}
+ ui()}
+function next(auto){
+ if(!songs.length)return;
+ let n=shuf&&songs.length>1?(()=>{let r;do r=Math.floor(Math.random()*songs.length);while(r===cur);return r})():cur+1;
+ if(n>=songs.length){if(auto&&rep===0){au.pause();return ui()}n=0}
+ play(n)}
+function prev(){if(au.currentTime>3||cur<=0)au.currentTime=0;else play(cur-1)}
+function toggle(){if(cur<0){play(0);return}au.paused?au.play().catch(()=>{}):au.pause()}
+
+au.onended=()=>next(true);
+au.onplay=au.onpause=ui;
+au.ontimeupdate=()=>{const d=au.duration;$('#t1').textContent=fmt(au.currentTime);$('#t2').textContent=fmt(d);if(isFinite(d))$('#seek').value=au.currentTime/d*1000};
+$('#seek').oninput=e=>{if(isFinite(au.duration))au.currentTime=e.target.value/1000*au.duration};
+$('#mp').onclick=$('#fp').onclick=toggle;
+$('#next').onclick=()=>next(false);$('#prev').onclick=prev;
+$('#shuf').onclick=()=>{shuf=!shuf;ui()};
+$('#rep').onclick=()=>{rep=(rep+1)%3;au.loop=rep===2;ui()};
+$('#mopen').onclick=()=>$('#full').classList.add('open');
+$('#close').onclick=()=>$('#full').classList.remove('open');
+$('#q').oninput=render;
+$('#list').onclick=async e=>{
+ const d=e.target.closest('.del'),p=e.target.closest('.pick');
+ if(d){const id=+d.dataset.id,was=songs[cur]&&songs[cur].id;await tx('readwrite',s=>s.delete(id));
+  const keep=songs.filter(s=>s.id!==id&&s.id===was);if(was===id){au.pause();au.removeAttribute('src')}
+  await load();if(keep.length)cur=songs.findIndex(s=>s.id===was);ui()}
+ else if(p)play(+p.closest('.row').dataset.i)};
+$('#f').onchange=async e=>{
+ const files=[...e.target.files];
+ for(const f of files)await tx('readwrite',s=>s.add({name:f.name,blob:f}));
+ const was=songs[cur]&&songs[cur].id;await load();
+ if(was)cur=songs.findIndex(s=>s.id===was);
+ e.target.value='';ui()};
+
+// Lock-screen and notification controls
+try{if('mediaSession' in navigator){const m=navigator.mediaSession;
+ m.setActionHandler('play',toggle);m.setActionHandler('pause',toggle);
+ m.setActionHandler('previoustrack',prev);m.setActionHandler('nexttrack',()=>next(false))}}catch(e){}
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+load();
+</script>
+</body>
+</html>
